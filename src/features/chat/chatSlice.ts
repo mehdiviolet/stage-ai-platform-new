@@ -94,11 +94,18 @@ export const loadConversationById = createAsyncThunk<
   }
 });
 
-export const deleteById = createAsyncThunk(
+export const deleteById = createAsyncThunk<number, number>(
   "chat/deleteConversation",
-  async (id: number) => {
-    const { data } = await conversationApi.deleteById(id);
-    return data;
+  async (id: number, { rejectWithValue }) => {
+    try {
+      await conversationApi.deleteById(id);
+      return id;
+    } catch (error: any) {
+      console.log(error);
+      return rejectWithValue(
+        error.response?.data?.message || "deleted failed!"
+      );
+    }
   }
 );
 
@@ -185,7 +192,7 @@ const chatSlice = createSlice({
       })
       .addCase(sendMessage.rejected, (s, a) => {
         s.loading = false;
-        s.error = a.error.message;
+        s.error = a.payload as string;
       })
       .addCase(loadConversations.pending, (s) => {
         s.loading = true;
@@ -207,7 +214,7 @@ const chatSlice = createSlice({
       })
       .addCase(loadConversationById.rejected, (s, a) => {
         s.loading = false;
-        s.error = a.error.message;
+        s.error = a.payload as string;
       })
       .addCase(deleteById.pending, (s) => {
         s.loading = true;
