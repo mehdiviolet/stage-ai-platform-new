@@ -44,6 +44,19 @@ const initialState: AuthState = {
   loading: false,
 };
 
+export const registerUser = createAsyncThunk<
+  RegisterRespnse,
+  { email: string; password: string; fullName: string }
+>("auth/register", async (payload, { rejectWithValue }) => {
+  try {
+    const { data } = await authApi.register(payload);
+    return data; // Ritorna { success, message, user }
+  } catch (error: any) {
+    console.log(error);
+    return rejectWithValue(error.response?.data?.message || "Error register!");
+  }
+});
+
 export const logUser = createAsyncThunk<
   LoginResponse,
   { email: string; password: string }
@@ -56,19 +69,6 @@ export const logUser = createAsyncThunk<
     return rejectWithValue(
       error.response?.data?.message || "Credenziali non valide!"
     );
-  }
-});
-
-export const registerUser = createAsyncThunk<
-  RegisterRespnse,
-  { email: string; password: string; fullName: string }
->("auth/register", async (payload, { rejectWithValue }) => {
-  try {
-    const { data } = await authApi.register(payload);
-    return data; // Ritorna { success, message, user }
-  } catch (error: any) {
-    console.log(error);
-    return rejectWithValue(error.response?.data?.message || "Error register!");
   }
 });
 
