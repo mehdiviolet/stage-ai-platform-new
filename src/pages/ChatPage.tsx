@@ -83,6 +83,7 @@ function ChatPage() {
   const canSend = !!message;
   const handleSendMessage = async function () {
     if (!currentConversation) return;
+
     // STEP 1: Converti file in base64
     const mediaArray = await Promise.all(
       attachedFiles.map(async (item) => {

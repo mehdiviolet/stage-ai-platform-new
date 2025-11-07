@@ -51,7 +51,7 @@ type Message = {
   role: "user" | "assistant";
   content: string;
   timestamp: string;
-  mediaUrls: Array<any>;
+  mediaUrls?: Array<any>;
 };
 
 type chatState = {

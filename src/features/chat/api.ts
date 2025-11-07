@@ -23,6 +23,7 @@ export const conversationApi = {
   deleteById: (id: number) => api.delete(`/conversations/${id}`),
 };
 
+// Non è servito perché /conversations/{id}/message - Invia messaggio + media
 export const mediaApi = {
   uploadMedia: (payload: {
     base64: string;
