@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Box,
   Container,
@@ -9,17 +9,32 @@ import {
   useTheme,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
-import { Outlet } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
+import { useAppDispatch } from "../../app/hooks";
+import { useDispatch } from "react-redux";
+import { logout } from "../../features/auth/authSlice";
+import Sidebar from "./Sidebar";
+import { getConversations } from "../../features/chat/chatSlice";
 // import { NotificationSnackbar } from "../NotificationSnackbar";
-// import { Sidebar } from "./Sidebar";
 
 export function AppLayout() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+  const navigate = useNavigate();
+
+  const dispatch = useAppDispatch();
+
+  useEffect(() => {
+    dispatch(getConversations());
+  }, []);
 
   // Stato per apertura drawer mobile
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  const logOut = function () {
+    dispatch(logout());
+    navigate("/login");
+  };
   // Larghezza sidebar/drawer
   const drawerWidth = 280;
 
@@ -45,7 +60,7 @@ export function AppLayout() {
           },
         }}
       >
-        {/* <Sidebar onItemClick={() => {}} /> */}
+        <Sidebar onItemClick={handleDrawerToggle} />
       </Drawer>
 
       {/* ========================================
@@ -66,7 +81,7 @@ export function AppLayout() {
           },
         }}
       >
-        {/* <Sidebar onItemClick={handleDrawerToggle} /> */}
+        <Sidebar onItemClick={handleDrawerToggle} />
       </Drawer>
 
       {/* ========================================
@@ -102,6 +117,7 @@ export function AppLayout() {
           <Typography variant="h6" sx={{ ml: 2 }}>
             AI Platform
           </Typography>
+          <button onClick={logOut}>Log out</button>
         </Box>
 
         {/* Contenuto pagine */}

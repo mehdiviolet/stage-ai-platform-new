@@ -11,23 +11,21 @@ import PersonIcon from "@mui/icons-material/Person";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import CloseIcon from "@mui/icons-material/Close";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
-import { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useAppDispatch, useAppSelector } from "../app/hooks";
 import {
   appendLocalMessage,
   createConversation,
+  getConversations,
   sendMessage,
+  // sendMessage,
 } from "../features/chat/chatSlice";
 import { mediaApi } from "../features/chat/api";
-
-// Helper: converte File in stringa base64
+// import { mediaApi } from "../features/chat/api";
 const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      resolve(result); // già in formato "data:image/png;base64,..."
-    };
+    reader.onload = () => resolve(reader.result as string);
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
@@ -35,86 +33,98 @@ const fileToBase64 = (file: File): Promise<string> => {
 
 type FileWithPreview = {
   file: File;
-  preview: string;
+  preview: string; // URL temporaneo per anteprima
 };
 
 function ChatPage() {
   const dispatch = useAppDispatch();
-  const { currentConversation, loading, error } = useAppSelector((s) => s.chat);
   const [message, setMessage] = useState("");
   const [attachedFiles, setAttachedFiles] = useState<FileWithPreview[]>([]);
+  const { currentConversation, isLoading, error } = useAppSelector(
+    (s) => s.chat
+  );
 
-  const canSend =
-    (message.trim().length > 0 || attachedFiles.length > 0) && !loading;
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (!currentConversation) {
-      dispatch(
-        createConversation({
-          name: "nuova chat",
-          model: "puyangwang/medgemma-27b-it:q6",
-        })
-      );
+  // useEffect(() => {
+  //   if (!currentConversation) {
+  //     dispatch(
+  //       createConversation({
+  //         name: "nuova chat",
+  //         model: "puyangwang/medgemma-27b-it:q6",
+  //       })
+  //     );
+  //   }
+  // }, []);
+
+  // STEP 1: Add file in setAttachedFiles
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      const newFiles = Array.from(files).map((file) => ({
+        file,
+        preview: URL.createObjectURL(file), // 👈 Crea URL temporaneo
+      }));
+      console.log(newFiles);
+      setAttachedFiles((prev) => [...prev, ...newFiles]);
+      e.target.value = "";
     }
-  }, []);
+  };
 
+  //  // STEP 1.1: Rimuove file in setAttachedFiles
+  const handleRemoveFile = (index: number) => {
+    setAttachedFiles((prev) => {
+      const fileToRemove = prev[index];
+      URL.revokeObjectURL(fileToRemove.preview); // 👈 Libera memoria
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
+  const canSend = !!message;
   const handleSendMessage = async function () {
-    if (!message.trim() || loading || !currentConversation) return;
-
-    // 🆕 STEP 1: Carica file su S3 PRIMA di inviare il messaggio
-    const uploadedUrls: string[] = [];
-
-    if (attachedFiles.length > 0) {
-      try {
-        for (const item of attachedFiles) {
-          const base64 = await fileToBase64(item.file);
-
-          const uploadResponse = await mediaApi.uploadMedia({
-            base64,
-            fileName: item.file.name,
-            mimType: item.file.type,
-          });
-
-          uploadedUrls.push(uploadResponse.data.url);
-        }
-      } catch (err) {
-        console.error("Error upload media", err);
-        // return;
-      }
-    }
-    // 🆕 STEP 2: Aggiungi messaggio utente localmente CON gli URL S3
-
-    dispatch(
-      appendLocalMessage({
-        role: "user",
-        content: message,
-        mediaUrls: uploadedUrls.length > 0 ? uploadedUrls : undefined,
-      })
-    );
-
+    if (!currentConversation) return;
+    // STEP 1: Converti file in base64
     const mediaArray = await Promise.all(
       attachedFiles.map(async (item) => {
-        const base64 = await fileToBase64(item.file);
+        console.log(item);
+
         return {
-          base64,
-          filename: item.file.name,
+          base64: await fileToBase64(item.file),
+          fileName: item.file.name,
           mimeType: item.file.type,
         };
       })
     );
-    setMessage("");
-    const result = await dispatch(
-      sendMessage({
-        conversationId: currentConversation?.id,
-        message,
-        media: mediaArray.length > 0 ? mediaArray : undefined,
+    // const conv = dispatch(getConversations());
+    console.log("HI....");
+    console.log(mediaArray);
+
+    // STEP 2: Aggiungi messaggio utente localmente (con anteprima temporanea)
+    dispatch(
+      appendLocalMessage({
+        role: "user",
+        content: message,
+        media: attachedFiles.map((f) => ({
+          preview: f.preview,
+          fileName: f.file.name,
+        })),
       })
     );
 
+    setMessage("");
     setAttachedFiles([]);
+    // STEP 3: Invia tutto al backend (che gestisce S3)
+    await dispatch(
+      sendMessage({
+        id: currentConversation.id,
+        message,
+        media: mediaArray?.length > 0 ? mediaArray : undefined,
+      })
+    );
 
-    console.log(result);
-    return result;
+    // STEP 4: Cleanup
+    attachedFiles.forEach((f) => URL.revokeObjectURL(f.preview));
+    // console.log(conv);
   };
 
   return (
@@ -186,20 +196,133 @@ function ChatPage() {
                       : "text.primary",
                 }}
               >
-                {/* {msg.mediaUrls} */}
                 {msg.content && (
                   <Typography variant="body1" sx={{ whiteSpace: "pre-wrap" }}>
                     {msg.content}
                   </Typography>
                 )}
               </Paper>
+
+              {/* Mostra media */}
+              {msg?.mediaUrls && msg?.mediaUrls.length > 0 && (
+                <Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap" }}>
+                  {msg.mediaUrls.map((item, idx) => (
+                    <img
+                      key={idx}
+                      src={item.preview}
+                      alt={item.fileName}
+                      style={{
+                        maxWidth: 200,
+                        maxHeight: 200,
+                        borderRadius: 8,
+                        objectFit: "cover",
+                      }}
+                    />
+                  ))}
+                </Box>
+              )}
+              {/* {attachedFiles && attachedFiles.length > 0 && (
+                <Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap" }}>
+                  {attachedFiles.map((item, idx) => (
+                    <img
+                      key={idx}
+                      src={item.preview}
+                      alt={item.file.name}
+                      style={{
+                        maxWidth: 200,
+                        maxHeight: 200,
+                        borderRadius: 8,
+                        objectFit: "cover",
+                      }}
+                    />
+                  ))}
+                </Box>
+              )} */}
             </Box>
           );
         })}
+        {/* Loading indicator */}
+        {isLoading && (
+          <Box sx={{ display: "flex", gap: 1, alignSelf: "flex-start" }}>
+            <Avatar sx={{ bgcolor: "grey.400", width: 32, height: 32 }}>
+              <SmartToyIcon fontSize="small" />
+            </Avatar>
+            <Paper elevation={2} sx={{ p: 1.5, bgcolor: "grey.100" }}>
+              <Typography variant="body2" color="text.secondary">
+                Sto pensando...
+              </Typography>
+            </Paper>
+          </Box>
+        )}
       </Paper>
+
+      {/* Anteprima file allegati */}
+      {attachedFiles.length > 0 && (
+        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mb: 2 }}>
+          {attachedFiles.map((item, index) => (
+            <Box
+              key={index}
+              sx={{
+                position: "relative",
+                width: 80,
+                height: 80,
+                borderRadius: 2,
+                overflow: "hidden",
+                border: "2px solid",
+                borderColor: "primary.main",
+              }}
+            >
+              {/* Thumbnail immagine */}
+              <img
+                src={item.preview}
+                alt={item.file.name}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                }}
+              />
+
+              {/* Pulsante X per rimuovere */}
+              <IconButton
+                size="small"
+                onClick={() => handleRemoveFile(index)}
+                sx={{
+                  position: "absolute",
+                  top: 4,
+                  right: 4,
+                  bgcolor: "rgba(0,0,0,0.6)",
+                  color: "white",
+                  "&:hover": {
+                    bgcolor: "rgba(0,0,0,0.8)",
+                  },
+                  width: 24,
+                  height: 24,
+                }}
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </Box>
+          ))}
+        </Box>
+      )}
+
       {/* Input area */}
       <Box sx={{ display: "flex", gap: 1 }}>
-        <IconButton color="default" size="large" title="Allega file">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          onChange={handleFileChange}
+        />
+        <IconButton
+          color="default"
+          onClick={() => fileInputRef.current?.click()}
+          size="large"
+          title="Allega file"
+        >
           <AttachFileIcon />
         </IconButton>
 

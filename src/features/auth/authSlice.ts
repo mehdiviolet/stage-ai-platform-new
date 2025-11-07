@@ -41,7 +41,7 @@ const initialState: AuthState = {
   user: null,
   token: local.get("token") || null,
   isAuthenticated: false,
-  loading: false,
+  loading: true,
 };
 
 export const registerUser = createAsyncThunk<
@@ -96,7 +96,6 @@ const authSlice = createSlice({
     },
     logout: (s) => {
       s.user = null;
-      s.user = null;
       s.isAuthenticated = false;
       local.del("token");
     },
@@ -122,8 +121,10 @@ const authSlice = createSlice({
       .addCase(registerUser.pending, (s) => {
         s.loading = true;
       })
-      .addCase(registerUser.fulfilled, (s) => {
+      .addCase(registerUser.fulfilled, (s, a) => {
         s.loading = false;
+        s.isAuthenticated = true;
+        // s.user = a.payload.user;
         // Non fa login automatico, l'utente deve essere attivato dall'admin
       })
       .addCase(registerUser.rejected, (s, a) => {
@@ -140,4 +141,4 @@ const authSlice = createSlice({
 
 export default authSlice.reducer;
 
-export const { clearError } = authSlice.actions;
+export const { clearError, logout } = authSlice.actions;

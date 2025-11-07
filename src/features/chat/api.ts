@@ -1,4 +1,5 @@
 import { api } from "../../lib/api/client";
+import type { createConversation } from "./types";
 
 export const authApi = {
   register: (payload: { email: string; password: string; fullName: string }) =>
@@ -14,16 +15,11 @@ export const conversationApi = {
   },
   sendMessage: (id: number, payload: { message: string; media?: Array<any> }) =>
     api.post(`/conversations/${id}/message`, payload),
-
   //Get all conversations
   getAll: () => api.get("/conversations"),
-
   //Get conversation By ID
-
   getById: (id: number) => api.get(`/conversations/${id}`),
-
   //Delete Conversation By ID
-
   deleteById: (id: number) => api.delete(`/conversations/${id}`),
 };
 

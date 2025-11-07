@@ -3,7 +3,7 @@ import {
   createSlice,
   type PayloadAction,
 } from "@reduxjs/toolkit";
-import { conversationApi } from "./api";
+import { conversationApi, mediaApi } from "./api";
 
 type Conversation = {
   id: number;
@@ -14,14 +14,14 @@ type Conversation = {
   messageCount: number;
 };
 
-type Message = {
+type Conversations = {
   id: number;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: string;
-  mediaUrls?: string[];
+  name: string;
+  model: string;
+  created_at: string;
+  updated_at: string;
+  messageCount: number;
 };
-
 type ConversationDetail = {
   id: number;
   name: string;
@@ -31,118 +31,120 @@ type ConversationDetail = {
   messages: Message[];
 };
 
-//NON serve media types qui! perché useremo direttamente in ChatPage!
-// type Media = {
-//   base64: string;
-//   fileName?: string;
-//   mimeType?: string;
+// type ConversationDet = {
+//   id: number;
+//   name: string;
+//   model: string;
+//   created_at: string;
+//   updated_at: string;
+//   message: Message[];
 // };
 
-type ChatState = {
-  conversations: Conversation[];
+type Media = {
+  base64: string;
+  fileName: string;
+  mimeType: string;
+};
+
+type Message = {
+  id: number;
+  role: "user" | "assistant";
+  content: string;
+  timestamp: string;
+  mediaUrls: Array<any>;
+};
+
+type chatState = {
+  conversation: Conversations[];
   currentConversation: {
     id: number;
     name: string;
     model: string;
     messages: Message[];
-    // media?: Media;
+    media?: Media;
   } | null;
-  loading: boolean;
+  isLoading: boolean;
   error?: string;
 };
 
+const initialState: chatState = {
+  conversation: [],
+  currentConversation: null,
+  isLoading: true,
+};
+
 export const createConversation = createAsyncThunk<
-  { success: boolean; conversation: Conversation },
+  {
+    success: boolean;
+    conversation: Conversation;
+  },
   { name: string; model: string }
->("chat/createConversation", async (payload, { rejectWithValue }) => {
-  try {
-    const { data } = await conversationApi.create(payload);
-    return data;
-  } catch (error: any) {
-    console.log(error);
-    return rejectWithValue(
-      error.response?.data?.message || "converstion failed!"
-    );
-  }
+>("chat/create", async (payload) => {
+  const { data } = await conversationApi.create(payload);
+  console.log("Conversation create : ", data, "payload:", payload);
+
+  return data;
 });
 
-export const loadConversations = createAsyncThunk<{
+export const getConversations = createAsyncThunk<{
   conversations: Conversation[];
-}>("chat/loadConversations", async (_, { rejectWithValue }) => {
-  try {
-    const { data } = await conversationApi.getAll();
-    return data;
-  } catch (error: any) {
-    console.log(error);
-    return rejectWithValue(
-      error.response?.data?.message || "load converstion failed!"
-    );
-  }
+}>("chat/conversations", async () => {
+  const { data } = await conversationApi.getAll();
+  console.log("All conversations:", data);
+  return data;
 });
 
-export const loadConversationById = createAsyncThunk<
+export const getConversationById = createAsyncThunk<
   {
     conversation: ConversationDetail;
   },
   number
->("chat/loadConversationById", async (id, { rejectWithValue }) => {
-  try {
-    const { data } = await conversationApi.getById(id);
-    return data;
-  } catch (error: any) {
-    return rejectWithValue(error.response?.data?.message || "Load failed!");
-  }
+>("chat/getConversation", async (id) => {
+  const { data } = await conversationApi.getById(id);
+  console.log("Conversation by id:", data);
+  return data;
 });
-
-export const deleteById = createAsyncThunk<number, number>(
-  "chat/deleteConversation",
-  async (id: number, { rejectWithValue }) => {
-    try {
-      await conversationApi.deleteById(id);
-      return id;
-    } catch (error: any) {
-      console.log(error);
-      return rejectWithValue(
-        error.response?.data?.message || "deleted failed!"
-      );
-    }
-  }
-);
 
 export const sendMessage = createAsyncThunk<
   {
     success: boolean;
-    conversation: Conversation;
     message: Message;
     messageCount: number;
   },
   {
-    conversationId: number;
+    id: number;
     message: string;
-    media?: any[];
+    media?: Array<any>;
   }
->("chat/sendMessage", async (payload, { rejectWithValue }) => {
-  try {
-    const { data } = await conversationApi.sendMessage(payload.conversationId, {
-      message: payload.message,
-      media: payload.media,
-    });
-    console.log(data);
-
-    return data;
-  } catch (error: any) {
-    console.log(error);
-    return rejectWithValue(
-      error.response?.data?.message || "send message failed!"
-    );
-  }
+>("chat/sendMessage", async (payload) => {
+  const { data } = await conversationApi.sendMessage(payload.id, {
+    message: payload.message,
+    media: payload.media,
+  });
+  console.log("send message", data);
+  return data;
 });
 
-const initialState: ChatState = {
-  currentConversation: null,
-  conversations: [],
-  loading: false,
-};
+export const deleteConversationById = createAsyncThunk<number, number>(
+  "chat/deleteById",
+  async (id) => {
+    const { data } = await conversationApi.deleteById(id);
+    console.log("Delete:", id, data);
+    return id;
+  }
+);
+
+export const uploadMedia = createAsyncThunk<
+  { url: string; fileName: string; fileType: string; fileSize: number },
+  {
+    base64: string;
+    fileName?: string;
+    mimType?: string;
+  }
+>("chat/uploadMedia", async (payload) => {
+  const { data } = await mediaApi.uploadMedia(payload);
+  return data;
+});
 
 const chatSlice = createSlice({
   name: "chat",
@@ -153,82 +155,81 @@ const chatSlice = createSlice({
       a: PayloadAction<{
         role: "user" | "assistant";
         content: string;
-        mediaUrls?: string[];
+        media?: Array<{ preview: string; fileName: string }>;
       }>
     ) => {
-      if (s.currentConversation) {
-        s.currentConversation?.messages.push({
-          id: Date.now(),
-          timestamp: new Date().toISOString(),
-          ...a.payload,
-        });
-      }
+      const tempMessage: Message = {
+        id: Date.now(),
+        role: a.payload.role,
+        content: a.payload.content,
+        mediaUrls: a.payload.media,
+        timestamp: new Date().toISOString(),
+      };
+      s.currentConversation?.messages.push(tempMessage);
+    },
+    resetAll: (s) => {
+      s.conversation = [];
     },
   },
   extraReducers: (b) => {
-    //create conversation
     b.addCase(createConversation.pending, (s) => {
-      s.loading = true;
+      s.isLoading = true;
     })
       .addCase(createConversation.fulfilled, (s, a) => {
-        s.loading = false;
-        s.conversations.unshift(a.payload.conversation);
-        //createConversation ritorna conversazione senza messages, Tu aggiungi messages: [] manualmente per inizializzare
+        s.isLoading = false;
+        s.conversation.unshift(a.payload.conversation);
+        // s.currentConversation = a.payload.conversation;
         s.currentConversation = { ...a.payload.conversation, messages: [] };
       })
       .addCase(createConversation.rejected, (s, a) => {
-        s.loading = false;
-        s.error = a.payload as string;
+        s.isLoading = false;
       })
-      //send message
-      .addCase(sendMessage.pending, (s) => {
-        s.loading = true;
+      .addCase(sendMessage.pending, (s, a) => {
+        s.isLoading = true;
       })
       .addCase(sendMessage.fulfilled, (s, a) => {
+        s.error = undefined;
         if (s.currentConversation) {
           s.currentConversation.messages.push(a.payload.message);
-          s.loading = false;
+          s.isLoading = false;
+          console.log("Send");
         }
       })
-      .addCase(sendMessage.rejected, (s, a) => {
-        s.loading = false;
-        s.error = a.payload as string;
+      .addCase(getConversations.pending, (s, a) => {
+        s.isLoading = true;
       })
-      .addCase(loadConversations.pending, (s) => {
-        s.loading = true;
+      .addCase(getConversations.fulfilled, (s, a) => {
+        s.isLoading = false;
+        // s.conversation = a.payload.conversations.filter(
+        //   (conv) => conv.messageCount > 0
+        // );
+
+        s.conversation = a.payload.conversations;
       })
-      .addCase(loadConversations.fulfilled, (s, a) => {
-        s.loading = false;
-        s.conversations = a.payload.conversations;
+      .addCase(getConversationById.pending, (s) => {
+        s.isLoading = true;
       })
-      .addCase(loadConversations.rejected, (s, a) => {
-        s.loading = false;
-        s.error = a.payload as string;
-      })
-      .addCase(loadConversationById.pending, (s) => {
-        s.loading = true;
-      })
-      .addCase(loadConversationById.fulfilled, (s, a) => {
-        s.loading = false;
+      .addCase(getConversationById.fulfilled, (s, a) => {
+        s.isLoading = false;
         s.currentConversation = a.payload.conversation;
       })
-      .addCase(loadConversationById.rejected, (s, a) => {
-        s.loading = false;
-        s.error = a.payload as string;
+      .addCase(deleteConversationById.pending, (s) => {
+        s.isLoading = true;
       })
-      .addCase(deleteById.pending, (s) => {
-        s.loading = true;
+      .addCase(deleteConversationById.fulfilled, (s, a) => {
+        s.isLoading = false;
+        s.conversation = s.conversation.filter((conv) => conv.id !== a.payload);
+        //abbiamo ritornati id, quinid payload output è id: action.payload diventa id
       })
-      .addCase(deleteById.fulfilled, (s, a) => {
-        s.loading = false;
-        s.conversations = s.conversations.filter((c) => c.id !== a.payload);
-        if (s.currentConversation?.id === a.payload) {
-          s.currentConversation = null;
-        }
+      .addCase(uploadMedia.pending, (s, a) => {
+        s.isLoading = true;
+      })
+      .addCase(uploadMedia.fulfilled, (s, a) => {
+        s.isLoading = false;
+        // s.currentConversation?.media ;
       });
   },
 });
 
-export const { appendLocalMessage } = chatSlice.actions;
-
+export const { appendLocalMessage, resetAll } = chatSlice.actions;
 export default chatSlice.reducer;
